@@ -664,40 +664,150 @@ private struct SyncSettingsTab: View {
 // MARK: - Chat Settings Tab
 
 private struct ChatSettingsTab: View {
+    @AppStorage(OpenAICompatibleAgentRunner.Keys.backend) private var backend = "cli"
     @AppStorage("vaultChatRunner") private var runner = "auto"
+    @AppStorage(OpenAICompatibleAgentRunner.Keys.baseURL) private var apiBaseURL = OpenAICompatibleAgentRunner.Settings.defaultBaseURLString
+    @AppStorage(OpenAICompatibleAgentRunner.Keys.model) private var apiModel = ""
+    @AppStorage(OpenAICompatibleAgentRunner.Keys.thinkingLevel) private var apiThinkingLevel = OpenAICompatibleAgentRunner.ThinkingLevel.providerDefault.rawValue
     @State private var claudePath: String?
     @State private var codexPath: String?
+    @State private var apiToken = ""
+    @State private var tokenStatus: String?
+    @State private var modelOptions: [String] = []
+    @State private var modelRefreshStatus: String?
+    @State private var isRefreshingModels = false
 
     var body: some View {
         Form {
-            Section("Agent") {
-                Picker("Runner", selection: $runner) {
-                    Text("Auto").tag("auto")
-                    Text("Claude Code").tag("claude")
-                    Text("Codex").tag("codex")
-                }
-                Text("Auto picks Claude Code if installed, otherwise Codex. Vault chat runs read-only against your notes.")
+            Section("Active Chat Backend") {
+                backendToggle
+                Text("CLI uses Claude Code or Codex on your Mac. API uses an OpenAI-compatible chat completions endpoint.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
 
-            Section("Detection") {
-                detectionRow(
-                    name: "Claude Code",
-                    path: claudePath,
-                    installURL: URL(string: "https://docs.claude.com/claude-code")!
-                )
-                detectionRow(
-                    name: "Codex CLI",
-                    path: codexPath,
-                    installURL: URL(string: "https://developers.openai.com/codex/cli")!
-                )
+            if backend == "cli" {
+                Section("Agent") {
+                    Picker("Runner", selection: $runner) {
+                        Text("Auto").tag("auto")
+                        Text("Claude Code").tag("claude")
+                        Text("Codex").tag("codex")
+                    }
+                    Text("Auto picks Claude Code if installed, otherwise Codex. Vault chat runs read-only against your notes.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+
+                Section("Detection") {
+                    detectionRow(
+                        name: "Claude Code",
+                        path: claudePath,
+                        installURL: URL(string: "https://docs.claude.com/claude-code")!
+                    )
+                    detectionRow(
+                        name: "Codex CLI",
+                        path: codexPath,
+                        installURL: URL(string: "https://developers.openai.com/codex/cli")!
+                    )
+                }
+            } else if backend == "api" {
+                Section("API Endpoint") {
+                    TextField("Endpoint URL", text: $apiBaseURL)
+                    SecureField("API token", text: $apiToken)
+                    if let tokenStatus {
+                        Text(tokenStatus)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    Text("Use OpenAI's base URL (`https://api.openai.com/v1`) or a local OpenAI-compatible server such as LM Studio (`http://localhost:1234/v1`). Leave the token blank for local servers that do not require auth.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+
+                Section {
+                    Picker("Model", selection: $apiModel) {
+                        ForEach(modelChoices, id: \.self) { model in
+                            Text(modelLabel(for: model)).tag(model)
+                        }
+                    }
+                    Picker("Thinking", selection: $apiThinkingLevel) {
+                        ForEach(OpenAICompatibleAgentRunner.ThinkingLevel.allCases) { level in
+                            Text(level.label).tag(level.rawValue)
+                        }
+                    }
+                    if let modelRefreshStatus {
+                        Text(modelRefreshStatus)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    Text("Thinking maps to OpenAI-style `reasoning_effort`. Provider default omits the field for the broadest compatibility.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                } header: {
+                    HStack {
+                        Text("API Model")
+                        Spacer()
+                        Button {
+                            Task { await refreshModels() }
+                        } label: {
+                            if isRefreshingModels {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isRefreshingModels)
+                        .help("Refresh models")
+                        .accessibilityLabel("Refresh models")
+                    }
+                }
             }
         }
         .formStyle(.grouped)
-        .onAppear { refresh() }
+        .onAppear {
+            refresh()
+            loadToken()
+            refreshModelsIfNeeded()
+        }
+        .onChange(of: backend) { _, _ in
+            refreshModelsIfNeeded()
+        }
+        .onChange(of: apiToken) { _, newValue in
+            persistToken(newValue)
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refresh()
+        }
+    }
+
+    private var backendToggle: some View {
+        Picker("Backend", selection: $backend) {
+            Text("CLI").tag("cli")
+            Text("API").tag("api")
+        }
+        .pickerStyle(.segmented)
+        .allowsHitTesting(false)
+        .overlay {
+            HStack(spacing: 0) {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { toggleBackendSelection("cli") }
+                    .accessibilityLabel("CLI")
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { toggleBackendSelection("api") }
+                    .accessibilityLabel("API")
+            }
+        }
+    }
+
+    private func toggleBackendSelection(_ value: String) {
+        if backend == value {
+            backend = value == "cli" ? "api" : "cli"
+        } else {
+            backend = value
         }
     }
 
@@ -729,5 +839,85 @@ private struct ChatSettingsTab: View {
     private func refresh() {
         claudePath = AgentDiscovery.findClaude()?.url.path
         codexPath = AgentDiscovery.findCodex()?.url.path
+    }
+
+    private var modelChoices: [String] {
+        let savedModel = apiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        var choices = modelOptions
+        if !savedModel.isEmpty, !choices.contains(savedModel) {
+            choices.insert(savedModel, at: 0)
+        }
+        if choices.isEmpty {
+            choices.append("")
+        }
+        return choices
+    }
+
+    private func modelLabel(for model: String) -> String {
+        model.isEmpty ? "No model selected" : model
+    }
+
+    private func loadToken() {
+        do {
+            apiToken = try ChatAPIKeychain.loadToken() ?? ""
+            tokenStatus = nil
+        } catch {
+            tokenStatus = "Token load failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func persistToken(_ token: String) {
+        do {
+            let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            try ChatAPIKeychain.saveToken(trimmed)
+            tokenStatus = nil
+        } catch {
+            tokenStatus = "Token save failed: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func refreshModels() async {
+        isRefreshingModels = true
+        modelRefreshStatus = nil
+        defer { isRefreshingModels = false }
+
+        do {
+            let models = try await OpenAICompatibleAgentRunner.fetchModels(
+                baseURLString: apiBaseURL,
+                token: apiToken
+            )
+            modelOptions = models
+            if apiModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let first = models.first {
+                apiModel = first
+            }
+            modelRefreshStatus = models.isEmpty ? "No models returned" : nil
+        } catch {
+            modelOptions = []
+            modelRefreshStatus = describeAPIError(error)
+        }
+    }
+
+    private func refreshModelsIfNeeded() {
+        guard backend == "api",
+              !apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !isRefreshingModels
+        else { return }
+
+        Task { await refreshModels() }
+    }
+
+    private func describeAPIError(_ error: Error) -> String {
+        switch error {
+        case AgentError.httpError(let status, let body):
+            return "HTTP \(status): \(String(body.prefix(120)))"
+        case AgentError.transport(let message):
+            return "Network error: \(message)"
+        case let localized as LocalizedError:
+            return localized.errorDescription ?? String(describing: error)
+        default:
+            return String(describing: error)
+        }
     }
 }

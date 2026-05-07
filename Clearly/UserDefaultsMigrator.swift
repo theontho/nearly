@@ -60,6 +60,10 @@ enum UserDefaultsMigrator {
         "sidebarPinnedExpanded",
         "sidebarRecentsExpanded",
         "vaultChatRunner",
+        "vaultChatBackend",
+        "vaultChatAPIBaseURL",
+        "vaultChatAPIModel",
+        "vaultChatAPIThinkingLevel",
         "vaultChatPanelWidth",
         // Editor / detail toggles persisted outside @AppStorage
         "continuousSpellCheckingEnabled",

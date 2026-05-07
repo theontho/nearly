@@ -45,15 +45,20 @@ enum VaultChatCoordinator {
             presentError("This vault is no longer registered.")
             return
         }
-        guard let runner = resolveCompletionRunner() else {
-            presentError("Install Claude Code or Codex CLI to use Chat. https://docs.claude.com/claude-code · https://developers.openai.com/codex/cli")
+        let runner: AgentRunner
+        do {
+            runner = try resolveCompletionRunner()
+        } catch {
+            presentError(describe(error))
             return
         }
         guard let vaultIndex = workspace.vaultIndex(for: location) else {
             presentError("Vault index isn't loaded yet — give it a moment and try again.")
             return
         }
-        AgentWarmer.warmIfNeeded(runner: runner)
+        if shouldWarmSelectedRunner() {
+            AgentWarmer.warmIfNeeded(runner: runner)
+        }
 
         let userMessage = chat.appendUser(text)
         chat.draft = ""
@@ -87,7 +92,9 @@ enum VaultChatCoordinator {
                 DiagnosticLog.log("Chat: sending (turns=\(chat.messages.count), prompt=\(prompt.count) chars)")
 
                 let result = try await runner.run(prompt: prompt, model: nil)
-                AgentWarmer.markExercised()
+                if shouldWarmSelectedRunner() {
+                    AgentWarmer.markExercised()
+                }
                 DiagnosticLog.log("Chat: reply \(result.text.count) chars, tokens in=\(result.inputTokens) out=\(result.outputTokens)")
 
                 let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -110,7 +117,8 @@ enum VaultChatCoordinator {
     /// AgentWarmer short-circuits while the cache is still warm.
     static func warmForActiveVaultIfPossible(workspace: WorkspaceManager) {
         guard workspace.activeLocation?.url != nil,
-              let runner = resolveCompletionRunner() else {
+              shouldWarmSelectedRunner(),
+              let runner = try? resolveCompletionRunner() else {
             return
         }
         AgentWarmer.warmIfNeeded(runner: runner)
@@ -140,7 +148,11 @@ enum VaultChatCoordinator {
 
     /// Completion-only runner used by Chat (RAG path). No built-in tools —
     /// the agent's only job is to answer over the inlined retrieved context.
-    private static func resolveCompletionRunner() -> AgentRunner? {
+    private static func resolveCompletionRunner() throws -> AgentRunner {
+        if selectedBackend() == "api" {
+            return OpenAICompatibleAgentRunner(settings: try .loadFromUserDefaults())
+        }
+
         let pref = UserDefaults.standard.string(forKey: "vaultChatRunner") ?? "auto"
         let makeClaude: (AgentDiscovery.CLI) -> AgentRunner = { cli in
             ClaudeCLIAgentRunner(binaryURL: cli.url, enabledTools: "")
@@ -150,15 +162,30 @@ enum VaultChatCoordinator {
         }
         switch pref {
         case "claude":
-            return AgentDiscovery.findClaude().map(makeClaude)
+            if let claude = AgentDiscovery.findClaude() {
+                return makeClaude(claude)
+            }
         case "codex":
-            return AgentDiscovery.findCodex().map(makeCodex)
+            if let codex = AgentDiscovery.findCodex() {
+                return makeCodex(codex)
+            }
         default:
             if let claude = AgentDiscovery.findClaude() {
                 return makeClaude(claude)
             }
-            return AgentDiscovery.findCodex().map(makeCodex)
+            if let codex = AgentDiscovery.findCodex() {
+                return makeCodex(codex)
+            }
         }
+        throw ChatConfigurationError.missingCLI
+    }
+
+    private static func selectedBackend() -> String {
+        UserDefaults.standard.string(forKey: OpenAICompatibleAgentRunner.Keys.backend) ?? "cli"
+    }
+
+    private static func shouldWarmSelectedRunner() -> Bool {
+        selectedBackend() != "api"
     }
 
     private static func presentError(_ message: String) {
@@ -173,9 +200,22 @@ enum VaultChatCoordinator {
     private static func describe(_ error: Error) -> String {
         switch error {
         case AgentError.invalidResponse(let m): return "Invalid response: \(m)"
-        case AgentError.httpError(let status, _): return "HTTP \(status) fetching the source URL."
+        case AgentError.httpError(let status, let body): return "HTTP \(status): \(String(body.prefix(240)))"
         case AgentError.transport(let m): return "Network error: \(m)"
+        case let localized as LocalizedError:
+            return localized.errorDescription ?? String(describing: error)
         default: return String(describing: error)
+        }
+    }
+
+    private enum ChatConfigurationError: LocalizedError {
+        case missingCLI
+
+        var errorDescription: String? {
+            switch self {
+            case .missingCLI:
+                return "Install Claude Code or Codex CLI, or switch Chat to API in Settings > Chat."
+            }
         }
     }
 }
