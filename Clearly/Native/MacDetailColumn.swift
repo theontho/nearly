@@ -188,6 +188,8 @@ struct MacDetailColumn: View {
     @StateObject private var fileWatcher = FileWatcher()
     @State private var isFullscreen = false
     @State private var pendingWikiNavigation: PendingWikiNavigation?
+    @State private var previewFadeOutInProgress = false
+    @State private var previewTransitionGeneration = 0
 
     @AppStorage("editorFontSize") private var fontSize: Double = 16
     @AppStorage("previewFontFamily") private var previewFontFamily: String = "sanFrancisco"
@@ -277,6 +279,7 @@ struct MacDetailColumn: View {
             backlinksState.update(for: workspace.currentFileURL, using: workspace.activeVaultIndexes)
             statusBarState.resetSelection()
             statusBarState.updateText(workspace.currentFileText)
+            resetPreviewTransitionStateForCurrentDocument()
             setupFileWatcher()
             applyPendingWikiNavigationIfNeeded()
         }
@@ -290,6 +293,7 @@ struct MacDetailColumn: View {
             if newMode != .edit {
                 jumpToLineState.dismiss()
             }
+            updatePreviewTransitionState(from: oldMode, to: newMode)
             guard oldMode != newMode,
                   let text = SelectionBridge.selection(for: positionSyncID) else { return }
             if oldMode == .edit && newMode == .preview {
@@ -342,6 +346,7 @@ struct MacDetailColumn: View {
         backlinksState.update(for: workspace.currentFileURL, using: workspace.activeVaultIndexes)
         statusBarState.updateText(workspace.currentFileText)
         isFullscreen = NSApp.mainWindow?.styleMask.contains(.fullScreen) ?? false
+        resetPreviewTransitionStateForCurrentDocument()
         setupFileWatcher()
     }
 
@@ -385,15 +390,15 @@ struct MacDetailColumn: View {
                 Divider()
             }
 
-            ZStack {
-                editorPane
-                    .opacity(workspace.currentViewMode == .edit ? 1 : 0)
-                    .allowsHitTesting(workspace.currentViewMode == .edit)
-                previewPane
-                    .opacity(workspace.currentViewMode == .preview ? 1 : 0)
-                    .allowsHitTesting(workspace.currentViewMode == .preview)
-                if wysiwygExperimentEnabled && workspace.currentViewMode == .wysiwyg {
+            Group {
+                if usesSmallMarkdownCrossfade {
+                    crossfadeEditorPreviewPane
+                } else if isMarkdownEditorPreviewMode {
+                    nonPreloadedEditorPreviewPane
+                } else if wysiwygExperimentEnabled && workspace.currentViewMode == .wysiwyg {
                     wysiwygPane
+                } else {
+                    editorPane
                 }
             }
             .layoutPriority(1)
@@ -422,7 +427,6 @@ struct MacDetailColumn: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(Theme.Motion.smooth, value: workspace.currentViewMode)
         .animation(Theme.Motion.smooth, value: findState.isVisible)
         .animation(Theme.Motion.smooth, value: jumpToLineState.isVisible)
         .animation(Theme.Motion.smooth, value: backlinksState.isVisible)
@@ -445,6 +449,34 @@ struct MacDetailColumn: View {
             needsTrafficLightClearance: false,
             contentWidthEm: contentWidthEm
         )
+    }
+
+    private var crossfadeEditorPreviewPane: some View {
+        ZStack {
+            editorPane
+                .opacity(workspace.currentViewMode == .edit ? 1 : 0)
+                .allowsHitTesting(workspace.currentViewMode == .edit)
+
+            previewPane(preloadWhenHidden: true, hideWhenInactive: false)
+                .opacity(workspace.currentViewMode == .preview ? 1 : 0)
+                .allowsHitTesting(workspace.currentViewMode == .preview)
+        }
+        .animation(Theme.Motion.smooth, value: workspace.currentViewMode)
+    }
+
+    private var nonPreloadedEditorPreviewPane: some View {
+        ZStack {
+            editorPane
+                .opacity(workspace.currentViewMode == .edit ? 1 : 0)
+                .allowsHitTesting(workspace.currentViewMode == .edit)
+
+            if workspace.currentViewMode == .preview || previewFadeOutInProgress {
+                previewPane(preloadWhenHidden: false, hideWhenInactive: false)
+                    .opacity(workspace.currentViewMode == .preview ? 1 : 0)
+                    .allowsHitTesting(workspace.currentViewMode == .preview)
+            }
+        }
+        .animation(Theme.Motion.smooth, value: workspace.currentViewMode)
     }
 
     private var wysiwygPane: some View {
@@ -510,10 +542,17 @@ struct MacDetailColumn: View {
         )
     }
 
-    private var previewPane: some View {
+    private func previewPane(preloadWhenHidden: Bool, hideWhenInactive: Bool) -> some View {
         let fileURL = workspace.currentFileURL
-        _ = workspace.vaultIndexRevision
+        let isLargeDocument: Bool = {
+            if let fileURL {
+                return !Limits.isFileSize(fileURL, atMost: Int64(Limits.asyncPreviewRenderLength))
+            }
+            return workspace.currentFileText.utf8.count >= Limits.asyncPreviewRenderLength
+        }()
         let allWikiFileNames: Set<String> = {
+            guard !isLargeDocument else { return [] }
+            _ = workspace.vaultIndexRevision
             var names = Set<String>()
             for index in workspace.activeVaultIndexes {
                 for file in index.allFiles() {
@@ -526,9 +565,12 @@ struct MacDetailColumn: View {
         }()
         return PreviewView(
             markdown: workspace.currentFileText,
+            contentVersion: workspace.currentFileRevision,
             fontSize: CGFloat(fontSize),
             fontFamily: previewFontFamily,
             mode: workspace.currentViewMode,
+            preloadWhenHidden: preloadWhenHidden,
+            hideWhenInactive: hideWhenInactive,
             positionSyncID: positionSyncID,
             fileURL: fileURL,
             findState: findState,
@@ -574,7 +616,40 @@ struct MacDetailColumn: View {
         }
     }
 
+    private var usesSmallMarkdownCrossfade: Bool {
+        guard workspace.currentViewMode == .edit || workspace.currentViewMode == .preview else { return false }
+        if let fileURL = workspace.currentFileURL {
+            return Limits.isFileSize(fileURL, atMost: Int64(Limits.previewCrossfadeRenderLength))
+        }
+        return workspace.currentFileText.utf8.count <= Limits.previewCrossfadeRenderLength
+    }
+
+    private var isMarkdownEditorPreviewMode: Bool {
+        workspace.currentViewMode == .edit || workspace.currentViewMode == .preview
+    }
+
     // MARK: - Helpers
+
+    private func resetPreviewTransitionStateForCurrentDocument() {
+        previewTransitionGeneration += 1
+        previewFadeOutInProgress = false
+    }
+
+    private func updatePreviewTransitionState(from oldMode: ViewMode, to newMode: ViewMode) {
+        previewTransitionGeneration += 1
+        let generation = previewTransitionGeneration
+
+        if oldMode == .preview && newMode == .edit {
+            previewFadeOutInProgress = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                guard previewTransitionGeneration == generation else { return }
+                previewFadeOutInProgress = false
+            }
+            return
+        }
+
+        previewFadeOutInProgress = false
+    }
 
     private func handleActiveVaultChanged() {
         // Chat works in any vault. Auto-rebind to the new active vault — but
