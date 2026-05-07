@@ -127,6 +127,22 @@ targets:
         buildPhase: resources
     dependencies:
       - package: ClearlyCore
+    postCompileScripts:
+      - script: |
+          if [ "${CONFIGURATION}" != "Debug" ] || [ "${EFFECTIVE_PLATFORM_NAME}" != "-iphonesimulator" ]; then
+            exit 0
+          fi
+
+          FIXTURE_SOURCE="${SRCROOT}/simfixture"
+          FIXTURE_DEST="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/SimFixtureVault"
+          rm -rf "$FIXTURE_DEST"
+
+          if [ -d "$FIXTURE_SOURCE" ] && [ -n "$(find "$FIXTURE_SOURCE" -mindepth 1 -maxdepth 1 | head -n 1)" ]; then
+            mkdir -p "$(dirname "$FIXTURE_DEST")"
+            ditto "$FIXTURE_SOURCE" "$FIXTURE_DEST"
+          fi
+        name: "Copy iOS Simulator Fixture Vault"
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sabotage.clearly
