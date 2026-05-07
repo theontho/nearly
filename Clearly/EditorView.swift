@@ -50,7 +50,7 @@ struct EditorView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
-        TextCheckingPreferences.apply(to: textView)
+        TextCheckingPreferences.apply(to: textView, textLength: (text as NSString).length)
 
         // Font
         textView.font = Theme.editorFont
@@ -97,6 +97,7 @@ struct EditorView: NSViewRepresentable {
         let highlighter = MarkdownSyntaxHighlighter()
         context.coordinator.highlighter = highlighter
         textView.string = text
+        context.coordinator.applyLargeDocumentEditorPolicy(to: textView)
         textView.delegate = context.coordinator
         textView.onWikiLinkClicked = { target, heading in
             NotificationCenter.default.post(
@@ -115,6 +116,7 @@ struct EditorView: NSViewRepresentable {
         let gutter = LineNumberGutterView()
         gutter.textView = textView
         gutter.isHidden = !showLineNumbers
+        gutter.reloadData()
         context.coordinator.gutterView = gutter
 
         context.coordinator.textView = textView
@@ -228,6 +230,9 @@ struct EditorView: NSViewRepresentable {
             let gutterWidth = showLineNumbers ? gutter.preferredWidth() : 0
             if gutter.isHidden == showLineNumbers {
                 gutter.isHidden = !showLineNumbers
+                if showLineNumbers {
+                    gutter.reloadData()
+                }
             }
             let expectedGutterWidth = showLineNumbers ? gutterWidth : 0
             if abs(gutter.frame.width - expectedGutterWidth) > 0.5 || abs(scrollView.frame.minX - expectedGutterWidth) > 0.5 {
@@ -313,7 +318,9 @@ struct EditorView: NSViewRepresentable {
             context.coordinator.isHighlightingInProgress = false
 
             // Refresh ruler when appearance/font changes
-            context.coordinator.gutterView?.appearanceDidChange()
+            if context.coordinator.gutterView?.isHidden == false {
+                context.coordinator.gutterView?.appearanceDidChange()
+            }
         }
 
         // Only update text if it changed externally (not from user typing).
@@ -327,6 +334,7 @@ struct EditorView: NSViewRepresentable {
             context.coordinator.isUpdating = true
             let selectedRanges = textView.selectedRanges
             textView.string = text
+            context.coordinator.applyLargeDocumentEditorPolicy(to: textView)
             textView.selectedRanges = selectedRanges
             context.coordinator.isHighlightingInProgress = true
             context.coordinator.highlighter?.highlightAll(textView.textStorage!, caller: "externalText")
@@ -341,8 +349,10 @@ struct EditorView: NSViewRepresentable {
                     findState.resultsAreStale = true
                 }
             }
-            context.coordinator.gutterView?.textDidChange()
-            context.coordinator.gutterView?.selectionDidChange(selectedRange: textView.selectedRange())
+            if context.coordinator.gutterView?.isHidden == false {
+                context.coordinator.gutterView?.reloadData()
+                context.coordinator.gutterView?.selectionDidChange(selectedRange: textView.selectedRange())
+            }
             context.coordinator.isUpdating = false
         } else if context.coordinator.isUpdating && count <= 5 {
             DiagnosticLog.log("updateNSView #\(count): skipped text check (isUpdating)")
@@ -382,6 +392,7 @@ struct EditorView: NSViewRepresentable {
         var pendingBindingUpdates = 0
         var pendingBindingUpdateToken: UUID?
         private var pendingFullHighlightWork: DispatchWorkItem?
+        private var pendingIncrementalHighlightWork: DispatchWorkItem?
 
         // Find state tracking
         var matchRanges: [NSRange] = []
@@ -436,7 +447,9 @@ struct EditorView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
-            gutterView?.selectionDidChange(selectedRange: textView.selectedRange())
+            if gutterView?.isHidden == false {
+                gutterView?.selectionDidChange(selectedRange: textView.selectedRange())
+            }
 
             // Store current selection for highlight-on-mode-switch
             let range = textView.selectedRange()
@@ -543,6 +556,9 @@ struct EditorView: NSViewRepresentable {
 
         func currentLineInfo() -> (current: Int, total: Int) {
             guard let textView else { return (1, 1) }
+            if let gutterView {
+                return gutterView.lineInfo(selectedRange: textView.selectedRange())
+            }
             let text = textView.string as NSString
             let location = min(textView.selectedRange().location, text.length)
             var lineNumber = 1
@@ -609,6 +625,7 @@ struct EditorView: NSViewRepresentable {
         }
 
         var lastReplacementString: String?
+        var lastTextCheckingPerformanceMode: Bool?
 
         func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
             lastEditedRange = affectedCharRange
@@ -626,61 +643,24 @@ struct EditorView: NSViewRepresentable {
                 return
             }
 
-            DiagnosticLog.log("textDidChange (\(textView.textStorage?.length ?? 0) chars)")
-
             // Block updateNSView from replacing text while binding update is pending.
             // Without this, SwiftUI can call updateNSView (e.g., from a layout pass
             // triggered by the text view growing) BEFORE the async binding update fires,
             // see a mismatch between the old binding and the new text, and overwrite
             // the text view with the stale binding value — causing the cursor to jump.
             pendingBindingUpdates = 1
+            applyLargeDocumentEditorPolicy(to: textView)
 
-            // Save scroll position before highlighting
-            let scrollView = textView.enclosingScrollView
-            let savedOrigin = scrollView?.contentView.bounds.origin
+            let editedRange = lastEditedRange
+            let replacementLength = lastReplacementLength
+            let replacementString = lastReplacementString
 
-            // Highlight only the affected range for performance on long documents
-            isHighlightingInProgress = true
-            if let editedRange = lastEditedRange {
-                highlighter?.highlightAround(textView.textStorage!, editedRange: editedRange, replacementLength: lastReplacementLength, caller: "textDidChange")
-                lastEditedRange = nil
+            if isLargeDocument(textView) {
+                scheduleDeferredIncrementalHighlight(for: textView, editedRange: editedRange, replacementLength: replacementLength)
             } else {
-                highlighter?.highlightAll(textView.textStorage!, caller: "textDidChange-fallback")
+                performIncrementalHighlight(for: textView, editedRange: editedRange, replacementLength: replacementLength, caller: "textDidChange")
             }
-            isHighlightingInProgress = false
-
-            // If a block delimiter was edited, defer the full re-highlight so it
-            // doesn't block typing. The paragraph was already highlighted above.
-            if highlighter?.needsFullHighlight == true {
-                highlighter?.needsFullHighlight = false
-                pendingFullHighlightWork?.cancel()
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self, let textView = self.textView else { return }
-                    let sv = textView.enclosingScrollView
-                    let origin = sv?.contentView.bounds.origin
-                    self.isHighlightingInProgress = true
-                    self.highlighter?.highlightAll(textView.textStorage!, caller: "deferred-blockDelim")
-                    self.isHighlightingInProgress = false
-                    if let sv, let origin {
-                        sv.contentView.scroll(to: origin)
-                        sv.reflectScrolledClipView(sv.contentView)
-                    }
-                    self.invalidateVisibleRegion(of: textView)
-                }
-                pendingFullHighlightWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
-            }
-
-            // Restore scroll position that highlighting may have disturbed
-            if let scrollView, let savedOrigin {
-                scrollView.contentView.scroll(to: savedOrigin)
-                scrollView.reflectScrolledClipView(scrollView.contentView)
-            }
-
-            // Attribute-only highlighting doesn't invalidate display, so mark
-            // the viewport dirty after restoring scroll. Limit invalidation to
-            // the visible rect so large documents don't repaint end-to-end.
-            invalidateVisibleRegion(of: textView)
+            lastEditedRange = nil
 
             // Clear on edit; user retypes the query to refresh (#264).
             if let findState, findState.isVisible, !matchRanges.isEmpty {
@@ -696,21 +676,22 @@ struct EditorView: NSViewRepresentable {
             }
 
             // Update line number ruler
-            gutterView?.textDidChange()
+            gutterView?.textDidChange(editedRange: editedRange, replacementString: replacementString)
 
             // Wiki-link auto-complete trigger/update
             handleWikiLinkCompletion(textView)
 
-            // Update SwiftUI binding with a short debounce. The text view already shows
+            // Update SwiftUI binding with a debounce. The text view already shows
             // the correct content — the binding is only needed for preview, file saving,
             // and outline parsing, which are expensive on long documents and don't need
-            // to run on every keystroke.
+            // to run between individual keystrokes.
             editGeneration += 1
             let gen = editGeneration
             let token = UUID()
             pendingBindingUpdateToken = token
             let scheduledPositionSyncID = lastPositionSyncID
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            let bindingDelay = bindingUpdateDelay(for: textView)
+            DispatchQueue.main.asyncAfter(deadline: .now() + bindingDelay) { [weak self] in
                 guard let self else { return }
                 guard self.pendingBindingUpdateToken == token else { return }
                 self.pendingBindingUpdateToken = nil
@@ -722,9 +703,96 @@ struct EditorView: NSViewRepresentable {
             }
         }
 
+        private func isLargeDocument(_ textView: NSTextView) -> Bool {
+            let length = textView.textStorage?.length ?? (textView.string as NSString).length
+            return length >= Limits.largeEditorPerformanceModeLength
+        }
+
+        private func scheduleDeferredIncrementalHighlight(for textView: NSTextView, editedRange: NSRange?, replacementLength: Int) {
+            pendingIncrementalHighlightWork?.cancel()
+
+            guard let editedRange else {
+                scheduleDeferredFullHighlight(for: textView, delay: 0.4, caller: "deferred-textDidChange-fallback")
+                return
+            }
+
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, let textView = self.textView else { return }
+                self.performIncrementalHighlight(
+                    for: textView,
+                    editedRange: editedRange,
+                    replacementLength: replacementLength,
+                    caller: "deferred-textDidChange"
+                )
+            }
+            pendingIncrementalHighlightWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+        }
+
+        private func performIncrementalHighlight(for textView: NSTextView, editedRange: NSRange?, replacementLength: Int, caller: String) {
+            guard let textStorage = textView.textStorage else { return }
+
+            let scrollView = textView.enclosingScrollView
+            let savedOrigin = scrollView?.contentView.bounds.origin
+
+            isHighlightingInProgress = true
+            if let editedRange {
+                highlighter?.highlightAround(textStorage, editedRange: editedRange, replacementLength: replacementLength, caller: caller)
+            } else {
+                highlighter?.highlightAll(textStorage, caller: "\(caller)-fallback")
+            }
+            isHighlightingInProgress = false
+
+            if highlighter?.needsFullHighlight == true {
+                highlighter?.needsFullHighlight = false
+                scheduleDeferredFullHighlight(for: textView, delay: 0.3, caller: "deferred-blockDelim")
+            }
+
+            if let scrollView, let savedOrigin {
+                scrollView.contentView.scroll(to: savedOrigin)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+
+            invalidateHighlightedRegion(of: textView, editedRange: editedRange, replacementLength: replacementLength)
+        }
+
+        private func scheduleDeferredFullHighlight(for textView: NSTextView, delay: TimeInterval, caller: String) {
+            pendingFullHighlightWork?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, let textView = self.textView else { return }
+                let scrollView = textView.enclosingScrollView
+                let savedOrigin = scrollView?.contentView.bounds.origin
+                self.isHighlightingInProgress = true
+                self.highlighter?.highlightAll(textView.textStorage!, caller: caller)
+                self.isHighlightingInProgress = false
+                if let scrollView, let savedOrigin {
+                    scrollView.contentView.scroll(to: savedOrigin)
+                    scrollView.reflectScrolledClipView(scrollView.contentView)
+                }
+                self.invalidateHighlightedRegion(of: textView, editedRange: nil, replacementLength: 0)
+            }
+            pendingFullHighlightWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        }
+
         private func commitTextViewContents(_ textView: NSTextView) {
             parent.text = textView.string
             WorkspaceManager.shared.contentDidChange()
+        }
+
+        func applyLargeDocumentEditorPolicy(to textView: NSTextView) {
+            let length = textView.textStorage?.length ?? (textView.string as NSString).length
+            let performanceMode = length >= Limits.largeEditorPerformanceModeLength
+            if lastTextCheckingPerformanceMode != performanceMode {
+                lastTextCheckingPerformanceMode = performanceMode
+                TextCheckingPreferences.apply(to: textView, textLength: length)
+            }
+            textView.layoutManager?.backgroundLayoutEnabled = !performanceMode
+        }
+
+        private func bindingUpdateDelay(for textView: NSTextView) -> TimeInterval {
+            let length = textView.textStorage?.length ?? (textView.string as NSString).length
+            return length >= Limits.largeEditorPerformanceModeLength ? 2.0 : 0.15
         }
 
         // MARK: - Wiki-Link Auto-Complete
@@ -829,9 +897,33 @@ struct EditorView: NSViewRepresentable {
             gutterView?.scrollOrFrameDidChange()
         }
 
-        private func invalidateVisibleRegion(of textView: NSTextView) {
-            let visibleRect = textView.enclosingScrollView?.contentView.documentVisibleRect ?? textView.visibleRect
-            textView.setNeedsDisplay(visibleRect, avoidAdditionalLayout: true)
+        private func invalidateHighlightedRegion(of textView: NSTextView, editedRange: NSRange?, replacementLength: Int) {
+            guard let editedRange,
+                  let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer else {
+                let visibleRect = textView.enclosingScrollView?.contentView.documentVisibleRect ?? textView.visibleRect
+                textView.setNeedsDisplay(visibleRect, avoidAdditionalLayout: true)
+                return
+            }
+
+            let nsText = textView.string as NSString
+            let safeLocation = max(0, min(editedRange.location, nsText.length))
+            let safeLength = max(0, min(replacementLength, nsText.length - safeLocation))
+            let paragraphRange = nsText.paragraphRange(for: NSRange(location: safeLocation, length: safeLength))
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: paragraphRange, actualCharacterRange: nil)
+            guard glyphRange.length > 0 else { return }
+
+            var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let origin = textView.textContainerOrigin
+            rect.origin.x += origin.x
+            rect.origin.y += origin.y
+            rect = rect.insetBy(dx: -4, dy: -4)
+
+            if let visible = textView.enclosingScrollView?.contentView.documentVisibleRect {
+                rect = rect.intersection(visible)
+            }
+            guard !rect.isNull, !rect.isEmpty else { return }
+            textView.setNeedsDisplay(rect, avoidAdditionalLayout: true)
         }
 
         // MARK: - Find

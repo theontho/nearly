@@ -421,9 +421,14 @@ struct MacDetailColumn: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            if statusBarState.isVisible {
+            if statusBarState.isVisible || isLargeDocumentMode {
                 Divider()
-                StatusBarView(state: statusBarState)
+                StatusBarView(
+                    state: statusBarState,
+                    showsCounts: statusBarState.isVisible,
+                    showsLargeDocumentMode: isLargeDocumentMode,
+                    documentCharacterCount: documentCharacterCount
+                )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -431,6 +436,15 @@ struct MacDetailColumn: View {
         .animation(Theme.Motion.smooth, value: jumpToLineState.isVisible)
         .animation(Theme.Motion.smooth, value: backlinksState.isVisible)
         .animation(Theme.Motion.smooth, value: statusBarState.isVisible)
+        .animation(Theme.Motion.smooth, value: isLargeDocumentMode)
+    }
+
+    private var documentCharacterCount: Int {
+        (workspace.currentFileText as NSString).length
+    }
+
+    private var isLargeDocumentMode: Bool {
+        documentCharacterCount >= Limits.largeEditorPerformanceModeLength
     }
 
     private var editorPane: some View {

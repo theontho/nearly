@@ -13,6 +13,8 @@ public enum Limits {
 
     public static let maxHighlightAllLength: Int = 5_000_000
 
+    public static let largeEditorPerformanceModeLength: Int = 50_000
+
     public static func isOpenableSize(_ url: URL) -> Bool {
         isFileSize(url, atMost: maxOpenableFileSize)
     }

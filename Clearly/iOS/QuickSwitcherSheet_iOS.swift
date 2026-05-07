@@ -202,7 +202,7 @@ struct QuickSwitcherSheet_iOS: View {
             let byURL = Dictionary(uniqueKeysWithValues: files.map {
                 ($0.url.standardizedFileURL, $0)
             })
-            let groups = index.searchFilesGrouped(query: trimmed)
+            let groups = index.searchFilesGrouped(query: trimmed, maxExcerptsPerFile: 1)
             for group in groups {
                 let absoluteURL = root.appendingPathComponent(group.file.path).standardizedFileURL
                 guard !filenameURLs.contains(absoluteURL) else { continue }

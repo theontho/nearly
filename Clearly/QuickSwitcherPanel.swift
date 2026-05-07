@@ -370,7 +370,7 @@ final class QuickSwitcherManager: NSObject {
         if query.count >= 2 {
             let nameMatchURLs = Set(nameMatches.map(\.fullURL))
             for index in indexes {
-                for group in index.searchFilesGrouped(query: query) {
+                for group in index.searchFilesGrouped(query: query, maxExcerptsPerFile: 1) {
                     let fileURL = group.vaultRootURL.appendingPathComponent(group.file.path)
                     guard !nameMatchURLs.contains(fileURL) else { continue }
                     let excerpt = group.excerpts.first
