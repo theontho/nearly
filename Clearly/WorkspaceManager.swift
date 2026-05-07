@@ -805,36 +805,27 @@ final class WorkspaceManager {
 
     private static func readUTF8Text(at url: URL, progress: @escaping @Sendable (Double) -> Void) throws -> String {
         try Task.checkCancellation()
-        let totalBytes = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-
-        var data = Data()
-        if totalBytes > 0, totalBytes <= Int64(Int.max) {
-            data.reserveCapacity(Int(totalBytes))
-        }
-
-        var bytesRead: Int64 = 0
-        while true {
-            try Task.checkCancellation()
-            let chunk = try handle.read(upToCount: 512 * 1024) ?? Data()
-            guard !chunk.isEmpty else { break }
-            bytesRead += Int64(chunk.count)
-            data.append(chunk)
-            if totalBytes > 0 {
-                progress(min(0.99, Double(bytesRead) / Double(totalBytes)))
-            }
-        }
-
+        // Memory-map when the OS thinks it's safe (i.e. the file is on a
+        // local volume) — that avoids the 2× peak of FileHandle.read(into:)
+        // followed by String(data:encoding:) for large markdown files.
+        // Falls back to a regular load for network/iCloud paths.
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
         try Task.checkCancellation()
         progress(1)
         guard let text = String(data: data, encoding: .utf8) else {
             throw DocumentLoadError.invalidUTF8
         }
+        try Task.checkCancellation()
         return text
     }
 
     private func applyLoadedFile(url: URL, text: String, inNewTab: Bool) {
+        // The dirty-state of the active document may have changed between
+        // when the load was kicked off and when its bytes are ready (the
+        // user kept typing). Re-confirm before clobbering.
+        if !inNewTab, activeDocumentIndex != nil {
+            guard confirmNavigationAwayFromActiveDoc() else { return }
+        }
         if inNewTab {
             let doc = OpenDocument(
                 id: UUID(),

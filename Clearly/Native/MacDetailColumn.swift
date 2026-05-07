@@ -558,12 +558,11 @@ struct MacDetailColumn: View {
 
     private func previewPane(preloadWhenHidden: Bool, hideWhenInactive: Bool) -> some View {
         let fileURL = workspace.currentFileURL
-        let isLargeDocument: Bool = {
-            if let fileURL {
-                return !Limits.isFileSize(fileURL, atMost: Int64(Limits.asyncPreviewRenderLength))
-            }
-            return workspace.currentFileText.utf8.count >= Limits.asyncPreviewRenderLength
-        }()
+        // Decide based on the in-memory text — that's what the renderer
+        // actually has to process. Falling back to on-disk size lies after
+        // edits (the user has typed 600K but the file is still 50K from last
+        // save, or vice versa).
+        let isLargeDocument = workspace.currentFileText.utf8.count >= Limits.asyncPreviewRenderLength
         let allWikiFileNames: Set<String> = {
             guard !isLargeDocument else { return [] }
             _ = workspace.vaultIndexRevision
@@ -632,9 +631,6 @@ struct MacDetailColumn: View {
 
     private var usesSmallMarkdownCrossfade: Bool {
         guard workspace.currentViewMode == .edit || workspace.currentViewMode == .preview else { return false }
-        if let fileURL = workspace.currentFileURL {
-            return Limits.isFileSize(fileURL, atMost: Int64(Limits.previewCrossfadeRenderLength))
-        }
         return workspace.currentFileText.utf8.count <= Limits.previewCrossfadeRenderLength
     }
 

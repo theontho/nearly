@@ -127,6 +127,14 @@ private struct DocumentLoadingOverlay: View {
             Rectangle()
                 .fill(.black.opacity(0.12))
                 .ignoresSafeArea()
+                // Block clicks from reaching the editor/sidebar underneath
+                // while the load is in flight. Without this the overlay is
+                // purely cosmetic — the user can interact with the content
+                // they "can't see" and clicks on toolbar/sidebar items race
+                // against the document load, which can land on the wrong
+                // document by the time the load resolves.
+                .contentShape(Rectangle())
+                .onTapGesture {}
 
             VStack(spacing: 14) {
                 ProgressView(value: state.progress)

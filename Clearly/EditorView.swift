@@ -332,6 +332,10 @@ struct EditorView: NSViewRepresentable {
         if !context.coordinator.isUpdating && context.coordinator.pendingBindingUpdates == 0 && textMismatch {
             DiagnosticLog.log("updateNSView #\(count): external text change (\(text.count) chars)")
             context.coordinator.isUpdating = true
+            // Drop any deferred incremental work — those ranges referred to the
+            // previous document and would highlight stale offsets after this
+            // text replacement.
+            context.coordinator.cancelPendingHighlightWork()
             let selectedRanges = textView.selectedRanges
             textView.string = text
             context.coordinator.applyLargeDocumentEditorPolicy(to: textView)
@@ -393,6 +397,12 @@ struct EditorView: NSViewRepresentable {
         var pendingBindingUpdateToken: UUID?
         private var pendingFullHighlightWork: DispatchWorkItem?
         private var pendingIncrementalHighlightWork: DispatchWorkItem?
+        // Paragraphs (in current text-storage coordinates) waiting for the
+        // deferred highlight pass on large documents. Tracked so a quick
+        // succession of edits in different paragraphs all get highlighted on
+        // flush, rather than only the last one.
+        private var pendingDirtyParagraphs: [NSRange] = []
+        private static let maxPendingDirtyParagraphs = 6
 
         // Find state tracking
         var matchRanges: [NSRange] = []
@@ -711,22 +721,84 @@ struct EditorView: NSViewRepresentable {
         private func scheduleDeferredIncrementalHighlight(for textView: NSTextView, editedRange: NSRange?, replacementLength: Int) {
             pendingIncrementalHighlightWork?.cancel()
 
-            guard let editedRange else {
+            guard let editedRange, let nsText = textView.textStorage?.string as NSString? else {
+                pendingDirtyParagraphs = []
                 scheduleDeferredFullHighlight(for: textView, delay: 0.4, caller: "deferred-textDidChange-fallback")
+                return
+            }
+
+            let safeLocation = max(0, min(editedRange.location, nsText.length))
+            let safeLength = max(0, min(replacementLength, nsText.length - safeLocation))
+            let newParagraph = nsText.paragraphRange(for: NSRange(location: safeLocation, length: safeLength))
+
+            // Shift previously-pending paragraphs to current text coordinates:
+            // - paragraphs entirely before this edit are unchanged
+            // - paragraphs after this edit shift by delta
+            // - paragraphs overlapping this edit are dropped (the new
+            //   paragraph supersedes them — a paragraph boundary may have
+            //   moved through the overlap and the snapshot is no longer
+            //   meaningful).
+            let editStart = editedRange.location
+            let editOldEnd = editedRange.location + editedRange.length
+            let delta = replacementLength - editedRange.length
+
+            var shifted: [NSRange] = []
+            for range in pendingDirtyParagraphs {
+                if range.upperBound <= editStart {
+                    shifted.append(range)
+                } else if range.location >= editOldEnd {
+                    let shiftedLocation = range.location + delta
+                    guard shiftedLocation >= 0, shiftedLocation + range.length <= nsText.length else { continue }
+                    shifted.append(NSRange(location: shiftedLocation, length: range.length))
+                }
+            }
+            shifted.append(newParagraph)
+            pendingDirtyParagraphs = Self.mergedRanges(shifted)
+
+            if pendingDirtyParagraphs.count > Self.maxPendingDirtyParagraphs {
+                pendingDirtyParagraphs = []
+                scheduleDeferredFullHighlight(for: textView, delay: 0.35, caller: "deferred-textDidChange-overflow")
                 return
             }
 
             let work = DispatchWorkItem { [weak self] in
                 guard let self, let textView = self.textView else { return }
-                self.performIncrementalHighlight(
-                    for: textView,
-                    editedRange: editedRange,
-                    replacementLength: replacementLength,
-                    caller: "deferred-textDidChange"
-                )
+                let paragraphs = self.pendingDirtyParagraphs
+                self.pendingDirtyParagraphs = []
+                for paragraph in paragraphs {
+                    self.performIncrementalHighlight(
+                        for: textView,
+                        editedRange: paragraph,
+                        replacementLength: paragraph.length,
+                        caller: "deferred-textDidChange"
+                    )
+                }
             }
             pendingIncrementalHighlightWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+        }
+
+        private static func mergedRanges(_ ranges: [NSRange]) -> [NSRange] {
+            guard !ranges.isEmpty else { return [] }
+            let sorted = ranges.sorted { $0.location < $1.location }
+            var result: [NSRange] = []
+            for range in sorted {
+                if let last = result.last, range.location <= last.location + last.length {
+                    let newEnd = max(last.location + last.length, range.location + range.length)
+                    result[result.count - 1] = NSRange(location: last.location, length: newEnd - last.location)
+                } else {
+                    result.append(range)
+                }
+            }
+            return result
+        }
+
+        func cancelPendingHighlightWork() {
+            pendingIncrementalHighlightWork?.cancel()
+            pendingIncrementalHighlightWork = nil
+            pendingFullHighlightWork?.cancel()
+            pendingFullHighlightWork = nil
+            pendingDirtyParagraphs = []
         }
 
         private func performIncrementalHighlight(for textView: NSTextView, editedRange: NSRange?, replacementLength: Int, caller: String) {

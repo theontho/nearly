@@ -810,7 +810,13 @@ public final class MarkdownSyntaxHighlighter: NSObject {
     }
 
     private static func mayContainMarkdownSyntax(_ text: String) -> Bool {
-        if text.range(of: #"[#*_`\[\]!>=$|<~]"#, options: .regularExpression) != nil {
+        if text.range(of: #"[#*_`\[\]!>$|<~]"#, options: .regularExpression) != nil {
+            return true
+        }
+        // `=` is too noisy for the cheap regex above (matches `key=value` in
+        // ordinary prose); only `==highlight==` is markdown, so check for
+        // the doubled form explicitly.
+        if text.contains("==") {
             return true
         }
 

@@ -661,50 +661,14 @@ struct PreviewView: NSViewRepresentable {
         """
     }
 
-    fileprivate struct PreviewChunk {
-        let markdown: String
-        let startLine: Int
-    }
+    fileprivate typealias PreviewChunk = PreviewChunker.Chunk
 
     fileprivate struct LazyPreviewContext {
         let fileURL: URL?
     }
 
     private static func previewChunks(from markdown: String) -> [PreviewChunk] {
-        let targetCharacters = 90_000
-        let hardLimitCharacters = 140_000
-        var chunks: [PreviewChunk] = []
-        var chunkStart = markdown.startIndex
-        var currentStartLine = 1
-        var currentLine = 1
-        var currentCount = 0
-        var lineStart = markdown.startIndex
-
-        while lineStart < markdown.endIndex {
-            let lineEnd = markdown[lineStart...].firstIndex(of: "\n") ?? markdown.endIndex
-            let nextLineStart = lineEnd < markdown.endIndex ? markdown.index(after: lineEnd) : markdown.endIndex
-            if currentCount == 0 {
-                chunkStart = lineStart
-                currentStartLine = currentLine
-            }
-            currentCount += markdown.distance(from: lineStart, to: nextLineStart)
-
-            let line = markdown[lineStart..<lineEnd]
-            let canSplit = line.first == "#" || line.allSatisfy { $0 == " " || $0 == "\t" || $0 == "\r" }
-            if currentCount >= hardLimitCharacters || (currentCount >= targetCharacters && canSplit) {
-                chunks.append(PreviewChunk(markdown: String(markdown[chunkStart..<nextLineStart]), startLine: currentStartLine))
-                currentCount = 0
-            }
-
-            lineStart = nextLineStart
-            currentLine += 1
-        }
-
-        if currentCount > 0 {
-            chunks.append(PreviewChunk(markdown: String(markdown[chunkStart..<markdown.endIndex]), startLine: currentStartLine))
-        }
-
-        return chunks
+        PreviewChunker.chunks(from: markdown)
     }
 
     private static func renderPreviewChunk(_ chunk: PreviewChunk, fileURL: URL?, includeFrontmatter: Bool) async throws -> String {

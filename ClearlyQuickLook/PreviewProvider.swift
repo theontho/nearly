@@ -3,9 +3,12 @@ import ClearlyCore
 import QuickLookUI
 import WebKit
 
-class PreviewViewController: NSViewController, QLPreviewingController {
+class PreviewViewController: NSViewController, QLPreviewingController, WKNavigationDelegate {
     private var webView: WKWebView!
     private var previewTask: Task<Void, Never>?
+    // QuickLook treats the handler as "preview ready"; only call it once the
+    // WebView has actually finished loading the rendered HTML.
+    private var pendingCompletion: ((Error?) -> Void)?
 
     deinit {
         previewTask?.cancel()
@@ -13,6 +16,7 @@ class PreviewViewController: NSViewController, QLPreviewingController {
 
     override func loadView() {
         webView = WKWebView()
+        webView.navigationDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
 
         let container = NSView()
@@ -29,8 +33,12 @@ class PreviewViewController: NSViewController, QLPreviewingController {
 
     func preparePreviewOfFile(at url: URL, completionHandler handler: @escaping (Error?) -> Void) {
         previewTask?.cancel()
-        webView.loadHTMLString("", baseURL: nil)
-        handler(nil)
+        // Resolve any prior pending handler so QuickLook isn't left waiting.
+        if let prior = pendingCompletion {
+            pendingCompletion = nil
+            prior(nil)
+        }
+        pendingCompletion = handler
 
         previewTask = Task { [weak self] in
             do {
@@ -52,15 +60,40 @@ class PreviewViewController: NSViewController, QLPreviewingController {
                 await MainActor.run {
                     guard let self else { return }
                     self.previewTask = nil
+                    // Cancellation here means a newer preparePreview call came
+                    // in; the new handler owns completion now.
                 }
             } catch {
                 await MainActor.run {
                     guard let self else { return }
                     self.previewTask = nil
-                    self.webView.loadHTMLString(Self.errorHTML(error), baseURL: nil)
+                    if let handler = self.pendingCompletion {
+                        self.pendingCompletion = nil
+                        handler(error)
+                    }
                 }
             }
         }
+    }
+
+    // MARK: - WKNavigationDelegate
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard let handler = pendingCompletion else { return }
+        pendingCompletion = nil
+        handler(nil)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        guard let handler = pendingCompletion else { return }
+        pendingCompletion = nil
+        handler(error)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        guard let handler = pendingCompletion else { return }
+        pendingCompletion = nil
+        handler(error)
     }
 
     private static func previewHTML(for htmlBody: String) -> String {
@@ -86,32 +119,4 @@ class PreviewViewController: NSViewController, QLPreviewingController {
         """
     }
 
-    private static func errorHTML(_ error: Error) -> String {
-        """
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <style>
-        :root { color-scheme: light dark; }
-        body { margin: 0; padding: 24px; background: Canvas; color: CanvasText; font: 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
-        h1 { font-size: 16px; margin: 0 0 8px; }
-        p { margin: 0; opacity: 0.7; overflow-wrap: anywhere; }
-        </style>
-        </head>
-        <body>
-        <h1>Preview failed</h1>
-        <p>\(escapeHTML(error.localizedDescription))</p>
-        </body>
-        </html>
-        """
-    }
-
-    private static func escapeHTML(_ text: String) -> String {
-        text
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-    }
 }

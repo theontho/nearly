@@ -276,6 +276,9 @@ public enum MarkdownRenderer {
             if let index = Int(indexString), segments.indices.contains(index) {
                 result += segments[index]
             } else {
+                #if DEBUG
+                DiagnosticLog.log("MarkdownRenderer.restoreTokenizedSegments: dropped placeholder \(tokenPrefix)\(indexString)__ (segments.count=\(segments.count))")
+                #endif
                 result += nsHTML.substring(with: match.range)
             }
             lastEnd = match.range.location + match.range.length

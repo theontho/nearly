@@ -126,6 +126,13 @@ final class LineNumberGutterView: NSView {
 
     func reloadData() {
         rebuildLineCache()
+        // After a full reload (e.g. external text replacement on document
+        // switch), the cached currentLineIndex is for the previous document.
+        // Re-derive from the live selection so the highlight lands on the
+        // right line until the next selectionDidChange call.
+        if let textView {
+            currentLineIndex = lineIndex(containing: textView.selectedRange().location)
+        }
         needsDisplay = true
     }
 
