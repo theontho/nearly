@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import ClearlyCore
 
 /// Stores the vault chat API bearer token outside UserDefaults. Endpoint and
 /// model preferences are plain settings, but the token is a credential.
@@ -85,5 +86,28 @@ enum ChatAPIKeychain {
                 return "Keychain item was not valid UTF-8."
             }
         }
+    }
+}
+
+extension OpenAICompatibleAgentRunner.Settings {
+    static func loadFromUserDefaults(_ defaults: UserDefaults = .standard) throws -> Self {
+        let baseURLString = defaults.string(forKey: OpenAICompatibleAgentRunner.Keys.baseURL) ??
+            OpenAICompatibleAgentRunner.Settings.defaultBaseURLString
+        let baseURL = try normalizedBaseURL(from: baseURLString)
+        let model = (defaults.string(forKey: OpenAICompatibleAgentRunner.Keys.model) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty else {
+            throw VaultChatAPIConfigurationError.missingModel
+        }
+        let thinkingRaw = defaults.string(forKey: OpenAICompatibleAgentRunner.Keys.thinkingLevel) ??
+            OpenAICompatibleAgentRunner.ThinkingLevel.providerDefault.rawValue
+        let thinkingLevel = OpenAICompatibleAgentRunner.ThinkingLevel(rawValue: thinkingRaw) ?? .providerDefault
+        let token = try ChatAPIKeychain.loadToken() ?? ""
+        return Self(
+            baseURL: baseURL,
+            token: token,
+            model: model,
+            thinkingLevel: thinkingLevel
+        )
     }
 }

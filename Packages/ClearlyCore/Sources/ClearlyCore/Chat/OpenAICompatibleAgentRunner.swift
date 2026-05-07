@@ -1,18 +1,17 @@
 import Foundation
-import ClearlyCore
 
 /// Calls an OpenAI-compatible Chat Completions API. This covers OpenAI's
 /// hosted API and local servers such as LM Studio that expose `/v1` endpoints.
-struct OpenAICompatibleAgentRunner: AgentRunner {
-    let settings: Settings
-    let urlSession: URLSession
+public struct OpenAICompatibleAgentRunner: AgentRunner {
+    public let settings: Settings
+    public let urlSession: URLSession
 
-    init(settings: Settings, urlSession: URLSession = .shared) {
+    public init(settings: Settings, urlSession: URLSession = .shared) {
         self.settings = settings
         self.urlSession = urlSession
     }
 
-    func run(prompt: String, model: String?) async throws -> AgentResult {
+    public func run(prompt: String, model: String?) async throws -> AgentResult {
         let selectedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? settings.model
         let requestBody = ChatCompletionRequest(
             model: selectedModel,
@@ -46,34 +45,22 @@ struct OpenAICompatibleAgentRunner: AgentRunner {
 
     // MARK: - Settings
 
-    struct Settings: Sendable, Equatable {
-        static let defaultBaseURLString = "https://api.openai.com/v1"
+    public struct Settings: Sendable, Equatable {
+        public static let defaultBaseURLString = "https://api.openai.com/v1"
 
-        let baseURL: URL
-        let token: String
-        let model: String
-        let thinkingLevel: ThinkingLevel
+        public let baseURL: URL
+        public let token: String
+        public let model: String
+        public let thinkingLevel: ThinkingLevel
 
-        static func loadFromUserDefaults(_ defaults: UserDefaults = .standard) throws -> Settings {
-            let baseURLString = defaults.string(forKey: Keys.baseURL) ?? defaultBaseURLString
-            let baseURL = try normalizedBaseURL(from: baseURLString)
-            let model = (defaults.string(forKey: Keys.model) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !model.isEmpty else {
-                throw VaultChatAPIConfigurationError.missingModel
-            }
-            let thinkingRaw = defaults.string(forKey: Keys.thinkingLevel) ?? ThinkingLevel.providerDefault.rawValue
-            let thinkingLevel = ThinkingLevel(rawValue: thinkingRaw) ?? .providerDefault
-            let token = try ChatAPIKeychain.loadToken() ?? ""
-            return Settings(
-                baseURL: baseURL,
-                token: token,
-                model: model,
-                thinkingLevel: thinkingLevel
-            )
+        public init(baseURL: URL, token: String, model: String, thinkingLevel: ThinkingLevel) {
+            self.baseURL = baseURL
+            self.token = token
+            self.model = model
+            self.thinkingLevel = thinkingLevel
         }
 
-        static func normalizedBaseURL(from rawValue: String) throws -> URL {
+        public static func normalizedBaseURL(from rawValue: String) throws -> URL {
             let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
                 throw VaultChatAPIConfigurationError.invalidBaseURL(rawValue)
@@ -101,24 +88,24 @@ struct OpenAICompatibleAgentRunner: AgentRunner {
         }
     }
 
-    enum Keys {
-        static let defaultBackend = "cli"
-        static let backend = "vaultChatBackend"
-        static let baseURL = "vaultChatAPIBaseURL"
-        static let model = "vaultChatAPIModel"
-        static let thinkingLevel = "vaultChatAPIThinkingLevel"
+    public enum Keys {
+        public static let defaultBackend = "cli"
+        public static let backend = "vaultChatBackend"
+        public static let baseURL = "vaultChatAPIBaseURL"
+        public static let model = "vaultChatAPIModel"
+        public static let thinkingLevel = "vaultChatAPIThinkingLevel"
     }
 
-    enum ThinkingLevel: String, CaseIterable, Identifiable, Sendable {
+    public enum ThinkingLevel: String, CaseIterable, Identifiable, Sendable {
         case providerDefault = "default"
         case minimal
         case low
         case medium
         case high
 
-        var id: String { rawValue }
+        public var id: String { rawValue }
 
-        var label: String {
+        public var label: String {
             switch self {
             case .providerDefault: return "Provider default"
             case .minimal: return "Minimal"
@@ -128,14 +115,14 @@ struct OpenAICompatibleAgentRunner: AgentRunner {
             }
         }
 
-        var requestValue: String? {
+        public var requestValue: String? {
             self == .providerDefault ? nil : rawValue
         }
     }
 
     // MARK: - Model listing
 
-    static func fetchModels(baseURLString: String, token: String) async throws -> [String] {
+    public static func fetchModels(baseURLString: String, token: String) async throws -> [String] {
         let baseURL = try Settings.normalizedBaseURL(from: baseURLString)
         var request = URLRequest(url: modelsEndpoint(for: baseURL))
         request.httpMethod = "GET"
@@ -337,11 +324,11 @@ private extension String {
     }
 }
 
-enum VaultChatAPIConfigurationError: LocalizedError, Equatable {
+public enum VaultChatAPIConfigurationError: LocalizedError, Equatable {
     case invalidBaseURL(String)
     case missingModel
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidBaseURL:
             return "Enter a valid API base URL in Settings > Chat."
