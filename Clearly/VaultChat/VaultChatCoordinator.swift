@@ -46,7 +46,7 @@ enum VaultChatCoordinator {
             return
         }
         guard let runner = resolveCompletionRunner() else {
-            presentError("Install Claude Code or Codex CLI to use Chat. https://docs.claude.com/claude-code · https://developers.openai.com/codex/cli")
+            presentError("Install Claude Code, Codex CLI, GitHub Copilot CLI, Gemini CLI, or opencode to use Chat. https://docs.claude.com/claude-code · https://developers.openai.com/codex/cli · https://github.com/github/copilot-cli · https://github.com/google-gemini/gemini-cli · https://opencode.ai")
             return
         }
         guard let vaultIndex = workspace.vaultIndex(for: location) else {
@@ -148,16 +148,40 @@ enum VaultChatCoordinator {
         let makeCodex: (AgentDiscovery.CLI) -> AgentRunner = { cli in
             CodexCLIAgentRunner(binaryURL: cli.url)
         }
+        let makeCopilot: (AgentDiscovery.CLI) -> AgentRunner = { cli in
+            CopilotCLIAgentRunner(binaryURL: cli.url)
+        }
+        let makeGemini: (AgentDiscovery.CLI) -> AgentRunner = { cli in
+            GeminiCLIAgentRunner(binaryURL: cli.url)
+        }
+        let makeOpenCode: (AgentDiscovery.CLI) -> AgentRunner = { cli in
+            OpenCodeCLIAgentRunner(binaryURL: cli.url)
+        }
         switch pref {
         case "claude":
             return AgentDiscovery.findClaude().map(makeClaude)
         case "codex":
             return AgentDiscovery.findCodex().map(makeCodex)
+        case "copilot":
+            return AgentDiscovery.findCopilot().map(makeCopilot)
+        case "gemini":
+            return AgentDiscovery.findGemini().map(makeGemini)
+        case "opencode":
+            return AgentDiscovery.findOpenCode().map(makeOpenCode)
         default:
             if let claude = AgentDiscovery.findClaude() {
                 return makeClaude(claude)
             }
-            return AgentDiscovery.findCodex().map(makeCodex)
+            if let codex = AgentDiscovery.findCodex() {
+                return makeCodex(codex)
+            }
+            if let copilot = AgentDiscovery.findCopilot() {
+                return makeCopilot(copilot)
+            }
+            if let gemini = AgentDiscovery.findGemini() {
+                return makeGemini(gemini)
+            }
+            return AgentDiscovery.findOpenCode().map(makeOpenCode)
         }
     }
 

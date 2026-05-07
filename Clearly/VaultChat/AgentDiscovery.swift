@@ -18,6 +18,9 @@ enum AgentDiscovery {
         enum Kind: Equatable {
             case claude
             case codex
+            case copilot
+            case gemini
+            case opencode
         }
     }
 
@@ -37,6 +40,36 @@ enum AgentDiscovery {
         }
         if let url = lookupOnPath("codex") {
             return CLI(kind: .codex, url: url)
+        }
+        return nil
+    }
+
+    static func findCopilot() -> CLI? {
+        if let url = firstExisting(at: copilotCandidatePaths) {
+            return CLI(kind: .copilot, url: url)
+        }
+        if let url = lookupOnPath("copilot") {
+            return CLI(kind: .copilot, url: url)
+        }
+        return nil
+    }
+
+    static func findGemini() -> CLI? {
+        if let url = firstExisting(at: geminiCandidatePaths) {
+            return CLI(kind: .gemini, url: url)
+        }
+        if let url = lookupOnPath("gemini") {
+            return CLI(kind: .gemini, url: url)
+        }
+        return nil
+    }
+
+    static func findOpenCode() -> CLI? {
+        if let url = firstExisting(at: openCodeCandidatePaths) {
+            return CLI(kind: .opencode, url: url)
+        }
+        if let url = lookupOnPath("opencode") {
+            return CLI(kind: .opencode, url: url)
         }
         return nil
     }
@@ -66,6 +99,48 @@ enum AgentDiscovery {
             "/opt/homebrew/bin/codex",
         ]
         if let nvmPath = nvmBinaryPath(for: "codex", home: home) {
+            paths.append(nvmPath)
+        }
+        return paths
+    }
+
+    private static var copilotCandidatePaths: [String] {
+        let home = realUserHome() ?? NSHomeDirectory()
+        var paths = [
+            "\(home)/.copilot/bin/copilot",
+            "\(home)/.local/bin/copilot",
+            "/usr/local/bin/copilot",
+            "/opt/homebrew/bin/copilot",
+        ]
+        if let nvmPath = nvmBinaryPath(for: "copilot", home: home) {
+            paths.append(nvmPath)
+        }
+        return paths
+    }
+
+    private static var geminiCandidatePaths: [String] {
+        let home = realUserHome() ?? NSHomeDirectory()
+        var paths = [
+            "\(home)/.gemini/bin/gemini",
+            "\(home)/.local/bin/gemini",
+            "/usr/local/bin/gemini",
+            "/opt/homebrew/bin/gemini",
+        ]
+        if let nvmPath = nvmBinaryPath(for: "gemini", home: home) {
+            paths.append(nvmPath)
+        }
+        return paths
+    }
+
+    private static var openCodeCandidatePaths: [String] {
+        let home = realUserHome() ?? NSHomeDirectory()
+        var paths = [
+            "\(home)/.opencode/bin/opencode",
+            "\(home)/.local/bin/opencode",
+            "/usr/local/bin/opencode",
+            "/opt/homebrew/bin/opencode",
+        ]
+        if let nvmPath = nvmBinaryPath(for: "opencode", home: home) {
             paths.append(nvmPath)
         }
         return paths

@@ -667,6 +667,9 @@ private struct ChatSettingsTab: View {
     @AppStorage("vaultChatRunner") private var runner = "auto"
     @State private var claudePath: String?
     @State private var codexPath: String?
+    @State private var copilotPath: String?
+    @State private var geminiPath: String?
+    @State private var openCodePath: String?
 
     var body: some View {
         Form {
@@ -675,8 +678,11 @@ private struct ChatSettingsTab: View {
                     Text("Auto").tag("auto")
                     Text("Claude Code").tag("claude")
                     Text("Codex").tag("codex")
+                    Text("Copilot").tag("copilot")
+                    Text("Gemini").tag("gemini")
+                    Text("opencode").tag("opencode")
                 }
-                Text("Auto picks Claude Code if installed, otherwise Codex. Vault chat runs read-only against your notes.")
+                Text("Auto picks Claude Code if installed, then Codex, Copilot, Gemini, and opencode. Vault chat runs read-only against your notes.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -691,6 +697,21 @@ private struct ChatSettingsTab: View {
                     name: "Codex CLI",
                     path: codexPath,
                     installURL: URL(string: "https://developers.openai.com/codex/cli")!
+                )
+                detectionRow(
+                    name: "GitHub Copilot CLI",
+                    path: copilotPath,
+                    installURL: URL(string: "https://github.com/github/copilot-cli")!
+                )
+                detectionRow(
+                    name: "Gemini CLI",
+                    path: geminiPath,
+                    installURL: URL(string: "https://github.com/google-gemini/gemini-cli")!
+                )
+                detectionRow(
+                    name: "opencode",
+                    path: openCodePath,
+                    installURL: URL(string: "https://opencode.ai")!
                 )
             }
         }
@@ -729,5 +750,8 @@ private struct ChatSettingsTab: View {
     private func refresh() {
         claudePath = AgentDiscovery.findClaude()?.url.path
         codexPath = AgentDiscovery.findCodex()?.url.path
+        copilotPath = AgentDiscovery.findCopilot()?.url.path
+        geminiPath = AgentDiscovery.findGemini()?.url.path
+        openCodePath = AgentDiscovery.findOpenCode()?.url.path
     }
 }

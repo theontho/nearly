@@ -29,9 +29,10 @@ enum AgentWarmer {
         lastWarmedAt = Date()
     }
 
-    /// Fire a background warmup call unless one is already in flight and the
-    /// cache is inside TTL. Returns immediately.
+    /// Fire a background Claude warmup call unless one is already in flight and
+    /// the cache is inside TTL. Returns immediately.
     static func warmIfNeeded(runner: AgentRunner) {
+        guard runner is ClaudeCLIAgentRunner else { return }
         if isWarm { return }
         if inFlight != nil { return }
 

@@ -2,9 +2,8 @@ import Foundation
 
 /// Coordinates the three async readers (stdout, stderr, termination) of a
 /// `Process` subprocess and resumes a single continuation exactly once when
-/// all three have completed. Used by both `ClaudeCLIAgentRunner` and
-/// `CodexCLIAgentRunner` — the streaming/teardown shape is identical, only
-/// the post-process parsing differs.
+/// all three have completed. Used by the local CLI agent runners — the
+/// streaming/teardown shape is identical, only the post-process parsing differs.
 final class ProcessCaptureState: @unchecked Sendable {
     private let lock = NSLock()
     private var stdoutData: Data?
