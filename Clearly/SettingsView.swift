@@ -671,6 +671,9 @@ private struct ChatSettingsTab: View {
     @AppStorage(OpenAICompatibleAgentRunner.Keys.thinkingLevel) private var apiThinkingLevel = OpenAICompatibleAgentRunner.ThinkingLevel.providerDefault.rawValue
     @State private var claudePath: String?
     @State private var codexPath: String?
+    @State private var copilotPath: String?
+    @State private var geminiPath: String?
+    @State private var openCodePath: String?
     @State private var apiToken = ""
     @State private var tokenStatus: String?
     @State private var modelOptions: [String] = []
@@ -681,7 +684,7 @@ private struct ChatSettingsTab: View {
         Form {
             Section("Active Chat Backend") {
                 backendToggle
-                Text("CLI uses Claude Code or Codex on your Mac. API uses an OpenAI-compatible chat completions endpoint.")
+                Text("CLI uses an agent installed on your Mac. API uses an OpenAI-compatible chat completions endpoint.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -692,8 +695,11 @@ private struct ChatSettingsTab: View {
                         Text("Auto").tag("auto")
                         Text("Claude Code").tag("claude")
                         Text("Codex").tag("codex")
+                        Text("Copilot").tag("copilot")
+                        Text("Gemini").tag("gemini")
+                        Text("opencode").tag("opencode")
                     }
-                    Text("Auto picks Claude Code if installed, otherwise Codex. Vault chat runs read-only against your notes.")
+                    Text("Auto picks Claude Code if installed, then Codex, Copilot, Gemini, and opencode. Vault chat runs read-only against your notes.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -708,6 +714,21 @@ private struct ChatSettingsTab: View {
                         name: "Codex CLI",
                         path: codexPath,
                         installURL: URL(string: "https://developers.openai.com/codex/cli")!
+                    )
+                    detectionRow(
+                        name: "GitHub Copilot CLI",
+                        path: copilotPath,
+                        installURL: URL(string: "https://github.com/github/copilot-cli")!
+                    )
+                    detectionRow(
+                        name: "Gemini CLI",
+                        path: geminiPath,
+                        installURL: URL(string: "https://github.com/google-gemini/gemini-cli")!
+                    )
+                    detectionRow(
+                        name: "opencode",
+                        path: openCodePath,
+                        installURL: URL(string: "https://opencode.ai")!
                     )
                 }
             } else if backend == "api" {
@@ -839,6 +860,9 @@ private struct ChatSettingsTab: View {
     private func refresh() {
         claudePath = AgentDiscovery.findClaude()?.url.path
         codexPath = AgentDiscovery.findCodex()?.url.path
+        copilotPath = AgentDiscovery.findCopilot()?.url.path
+        geminiPath = AgentDiscovery.findGemini()?.url.path
+        openCodePath = AgentDiscovery.findOpenCode()?.url.path
     }
 
     private var modelChoices: [String] {

@@ -160,6 +160,15 @@ enum VaultChatCoordinator {
         let makeCodex: (AgentDiscovery.CLI) -> AgentRunner = { cli in
             CodexCLIAgentRunner(binaryURL: cli.url)
         }
+        let makeCopilot: (AgentDiscovery.CLI) -> AgentRunner = { cli in
+            CopilotCLIAgentRunner(binaryURL: cli.url)
+        }
+        let makeGemini: (AgentDiscovery.CLI) -> AgentRunner = { cli in
+            GeminiCLIAgentRunner(binaryURL: cli.url)
+        }
+        let makeOpenCode: (AgentDiscovery.CLI) -> AgentRunner = { cli in
+            OpenCodeCLIAgentRunner(binaryURL: cli.url)
+        }
         switch pref {
         case "claude":
             if let claude = AgentDiscovery.findClaude() {
@@ -169,12 +178,33 @@ enum VaultChatCoordinator {
             if let codex = AgentDiscovery.findCodex() {
                 return makeCodex(codex)
             }
+        case "copilot":
+            if let copilot = AgentDiscovery.findCopilot() {
+                return makeCopilot(copilot)
+            }
+        case "gemini":
+            if let gemini = AgentDiscovery.findGemini() {
+                return makeGemini(gemini)
+            }
+        case "opencode":
+            if let openCode = AgentDiscovery.findOpenCode() {
+                return makeOpenCode(openCode)
+            }
         default:
             if let claude = AgentDiscovery.findClaude() {
                 return makeClaude(claude)
             }
             if let codex = AgentDiscovery.findCodex() {
                 return makeCodex(codex)
+            }
+            if let copilot = AgentDiscovery.findCopilot() {
+                return makeCopilot(copilot)
+            }
+            if let gemini = AgentDiscovery.findGemini() {
+                return makeGemini(gemini)
+            }
+            if let openCode = AgentDiscovery.findOpenCode() {
+                return makeOpenCode(openCode)
             }
         }
         throw ChatConfigurationError.missingCLI
@@ -215,7 +245,7 @@ enum VaultChatCoordinator {
         var errorDescription: String? {
             switch self {
             case .missingCLI:
-                return "Install Claude Code or Codex CLI, or switch Chat to API in Settings > Chat."
+                return "Install Claude Code, Codex CLI, GitHub Copilot CLI, Gemini CLI, or opencode, or switch Chat to API in Settings > Chat."
             }
         }
     }
