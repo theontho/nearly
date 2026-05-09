@@ -1,20 +1,20 @@
 <p align="center">
-  <img src="website/icon.png" width="128" height="128" alt="Clearly icon" />
+  <img src="website/icon.png" width="128" height="128" alt="Nearly icon" />
 </p>
 
-<h1 align="center">Clearly</h1>
+<h1 align="center">Nearly</h1>
 
 <p align="center">Markdown editor and knowledge base for Mac.</p>
 
 <p align="center">
   <a href="https://apps.apple.com/app/clearly-markdown/id6760669470">Mac App Store</a> &middot;
-  <a href="https://github.com/Shpigford/clearly/releases/latest/download/Clearly.dmg">Direct Download</a> &middot;
+  <a href="https://github.com/theontho/nearly/releases/latest/download/Nearly.dmg">Direct Download</a> &middot;
   <a href="https://clearly.md">Website</a> &middot;
   <a href="https://x.com/Shpigford">@Shpigford</a>
 </p>
 
 <p align="center">
-  <img src="website/screenshots/screenshot-1.jpg" width="720" alt="Clearly — editor with sidebar and document outline" />
+  <img src="website/screenshots/screenshot-1.jpg" width="720" alt="Nearly — editor with sidebar and document outline" />
 </p>
 
 Write with syntax highlighting, link your thoughts with wiki-links, search everything, preview beautifully. Native macOS, no Electron, no subscriptions.
@@ -76,7 +76,7 @@ Dependencies (cmark-gfm, Sparkle, GRDB, MCP SDK) are pulled automatically by Xco
 ## Quick Start
 
 ```bash
-git clone https://github.com/Shpigford/clearly.git
+git clone https://github.com/theontho/nearly.git
 cd clearly
 brew install xcodegen    # skip if already installed
 xcodegen generate        # generates Clearly.xcodeproj from project.yml
@@ -144,7 +144,7 @@ project.yml                         # xcodegen config (source of truth)
 
 ### Targets
 
-1. **Clearly** — main app. `DocumentGroup` with `MarkdownDocument`, editor and preview modes, file explorer, vault indexing.
+1. **Nearly** — main app. `DocumentGroup` with `MarkdownDocument`, editor and preview modes, file explorer, vault indexing.
 2. **ClearlyQuickLook** — Finder extension for previewing `.md` files with Space.
 3. **ClearlyCLI** — the `clearly` CLI binary and MCP server (same executable, different arg parser). Exposes 9 tools across read and write. See [clearly CLI](#clearly-cli) and [ClearlyMCP](#clearlymcp).
 4. **ClearlyCLIIntegrationTests** — XCTest suite driving the MCP server in-process via `InMemoryTransport`. Runs on every PR via `.github/workflows/test.yml`.
@@ -189,6 +189,17 @@ Edit `MarkdownSyntaxHighlighter.swift`. Patterns are applied in order — code b
 
 Edit `Shared/PreviewCSS.swift`. Used by both in-app preview and QuickLook. Keep in sync with `Theme.swift` colors. Base styles must come before `@media (prefers-color-scheme: dark)` overrides.
 
+### Change marketing name or icons
+
+Edit `branding.json`, then run:
+
+```bash
+./scripts/apply-branding.py
+xcodegen generate
+```
+
+The branding script updates the visible app name, website copy, bundled sample docs, release package names, and optional icon assets. Set `icons.appIconSource` to a replacement `.icon` bundle and `icons.websiteIcons` entries to image paths; `null` keeps the existing asset. Internal names stay stable: target names, bundle IDs, schemes, `ClearlyCore`, `ClearlyCLI`, and the `clearly` command are intentionally unchanged.
+
 ### Add a preview feature
 
 Follow the `MathSupport`/`MermaidSupport` pattern: create a `*Support.swift` enum in `Shared/` with a static method that returns a `<script>` block. Integrate into `PreviewView.swift`, `PreviewProvider.swift`, and `PDFExporter.swift`.
@@ -215,11 +226,11 @@ Manual:
 
 ## clearly CLI
 
-The `clearly` command-line binary is bundled with Clearly.app and operates on the same SQLite index the app maintains — no separate configuration, no data duplication.
+The `clearly` command-line binary is bundled with Nearly.app and operates on the same SQLite index the app maintains — no separate configuration, no data duplication.
 
 ### Install
 
-Open Clearly → **Settings → Command Line → Install**. Creates a symlink at `~/.local/bin/clearly` pointing to the bundled binary inside `Clearly.app/Contents/Resources/Helpers/ClearlyCLI`. No admin password needed — everything stays in your home folder.
+Open Nearly → **Settings → Command Line → Install**. Creates a symlink at `~/.local/bin/clearly` pointing to the bundled binary inside `Nearly.app/Contents/Resources/Helpers/ClearlyCLI`. No admin password needed — everything stays in your home folder.
 
 If `~/.local/bin` isn't already on your shell `PATH`, add this to `~/.zprofile` (or your shell's equivalent) and open a new terminal:
 
@@ -229,7 +240,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 Upgrades (Sparkle or App Store) keep the symlink valid. Uninstall from the same Settings pane.
 
-**Legacy `/usr/local/bin/clearly` installs** from Clearly ≤ 2.4.x keep working and are detected automatically — no action needed.
+**Legacy `/usr/local/bin/clearly` installs** from Nearly ≤ 2.4.x keep working and are detected automatically — no action needed.
 
 ### Subcommand reference
 
@@ -290,7 +301,7 @@ NEW=$(clearly read Notes/plan.md | jq -r '.content_hash')
 
 - **Multi-vault ambiguity** — pass `--in-vault <name>` on per-command calls, or `--vault <path>` on the global command to scope which vault(s) to load.
 - **Custom bundle id** — `--bundle-id com.sabotage.clearly.dev` to point at the Debug build's vault store.
-- **Dev-build SIGKILL** — the bundled `ClearlyCLI` inside `Clearly Dev.app/Contents/Resources/Helpers/` gets SIGKILL'd by macOS when launched standalone (code-signature invalidation). Use the product binary at `Build/Products/Debug/ClearlyCLI` directly for local testing.
+- **Dev-build SIGKILL** — the bundled `ClearlyCLI` inside `Nearly Dev.app/Contents/Resources/Helpers/` gets SIGKILL'd by macOS when launched standalone (code-signature invalidation). Use the product binary at `Build/Products/Debug/ClearlyCLI` directly for local testing.
 
 ## ClearlyMCP
 
@@ -337,7 +348,7 @@ Same binary, different arg — `clearly mcp` starts a stdio MCP server exposing 
 }
 ```
 
-Settings → Command Line → **Copy MCP config** in the Clearly app copies a ready-to-paste snippet with the correct path for your machine (flips to `~/.local/bin/clearly` once the symlink is installed, or the legacy `/usr/local/bin/clearly` path if you're on an older install).
+Settings → Command Line → **Copy MCP config** in the Nearly app copies a ready-to-paste snippet with the correct path for your machine (flips to `~/.local/bin/clearly` once the symlink is installed, or the legacy `/usr/local/bin/clearly` path if you're on an older install).
 
 ### Tool reference
 

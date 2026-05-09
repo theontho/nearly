@@ -1,0 +1,22 @@
+{
+  "marketingName": "Nearly",
+  "debugMarketingName": "Nearly Dev",
+  "internalName": "Clearly",
+  "cliName": "clearly",
+  "appBundleName": "Nearly.app",
+  "dmgName": "Nearly.dmg",
+  "previousMarketingNames": [
+    "SuperClearly"
+  ],
+  "icons": {
+    "appIconSource": null,
+    "websiteIcons": {
+      "website/icon.png": null,
+      "website/favicon-96x96.png": null,
+      "website/apple-touch-icon.png": null,
+      "website/favicon.ico": null,
+      "website/web-app-manifest-192x192.png": null,
+      "website/web-app-manifest-512x512.png": null
+    }
+  }
+}

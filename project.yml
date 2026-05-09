@@ -86,7 +86,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sabotage.clearly
-        PRODUCT_NAME: Clearly
+        PRODUCT_NAME: Nearly
         MARKETING_VERSION: "2.13.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
@@ -99,7 +99,7 @@ targets:
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.sabotage.clearly.dev
-          PRODUCT_NAME: "Clearly Dev"
+          PRODUCT_NAME: "Nearly Dev"
           CODE_SIGN_STYLE: Automatic
         Release:
           CODE_SIGN_STYLE: Automatic
@@ -146,7 +146,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sabotage.clearly
-        PRODUCT_NAME: Clearly
+        PRODUCT_NAME: Nearly
         MARKETING_VERSION: "1.4.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
@@ -161,7 +161,7 @@ targets:
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.sabotage.clearly.dev
-          PRODUCT_NAME: "Clearly Dev"
+          PRODUCT_NAME: "Nearly Dev"
           CODE_SIGN_STYLE: Automatic
         Release:
           CODE_SIGN_STYLE: Automatic

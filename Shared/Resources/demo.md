@@ -1,13 +1,13 @@
 ---
-title: Welcome to Clearly
+title: Welcome to Nearly
 author: Josh Pigford
 date: 2026-04-14
 tags: getting-started, knowledge-base, markdown
 ---
 
-# Welcome to Clearly
+# Welcome to Nearly
 
-A **native macOS knowledge base** built with SwiftUI — fast, focused, and beautifully rendered. Write in markdown, connect your thinking with [[wiki links]] and #tags, and let Clearly handle the rest.
+A **native macOS knowledge base** built with SwiftUI — fast, focused, and beautifully rendered. Write in markdown, connect your thinking with [[wiki links]] and #tags, and let Nearly handle the rest.
 
 > "The best tool is the one that gets out of your way." — *somebody, probably*
 
@@ -17,7 +17,7 @@ A **native macOS knowledge base** built with SwiftUI — fast, focused, and beau
 
 ## Connecting Your Knowledge
 
-Clearly isn't just a markdown editor — it's a place to think. Link your notes together, tag them for easy retrieval, and let the backlinks panel show you connections you didn't know existed.
+Nearly isn't just a markdown editor — it's a place to think. Link your notes together, tag them for easy retrieval, and let the backlinks panel show you connections you didn't know existed.
 
 ### Wiki Links
 
@@ -29,7 +29,7 @@ Link to other documents in your workspace with double brackets:
 - **Both:** [[Workspace Setup#Adding Folders|set up your folders]] combines alias and heading
 
 > [!TIP]
-> Type `[[` in the editor and Clearly will suggest matching pages from your workspace. Links that resolve to an existing page appear green; unresolved links appear orange so you can spot gaps.
+> Type `[[` in the editor and Nearly will suggest matching pages from your workspace. Links that resolve to an existing page appear green; unresolved links appear orange so you can spot gaps.
 
 ### Tags
 
@@ -45,11 +45,11 @@ Open the backlinks panel to see every document that links *to* the current page 
 
 ## Writing & Formatting
 
-Clearly supports the full range of markdown formatting. Write in **bold**, *italic*, ***bold italic***, or ~~strikethrough~~. Combine them inline: this sentence has **bold with *nested italic* inside** for emphasis.
+Nearly supports the full range of markdown formatting. Write in **bold**, *italic*, ***bold italic***, or ~~strikethrough~~. Combine them inline: this sentence has **bold with *nested italic* inside** for emphasis.
 
 Use `inline code` for short snippets, variable names like `NSTextStorage`, or file paths like `~/Desktop/notes.md`.
 
-Links look like this: [Clearly on GitHub](https://github.com/joshpigford/clearly), and autolinked URLs work too: https://apple.com.
+Links look like this: [Nearly on GitHub](https://github.com/theontho/nearly), and autolinked URLs work too: https://apple.com.
 
 ### Highlight
 
@@ -63,7 +63,7 @@ The formula for the area of a circle is A = πr^2^, and CO~2~ levels are rising.
 
 ### Emoji Shortcodes
 
-Clearly supports GitHub-style emoji shortcodes: :rocket: :fire: :sparkles: :tada: :heart: :100:
+Nearly supports GitHub-style emoji shortcodes: :rocket: :fire: :sparkles: :tada: :heart: :100:
 
 Ship features :ship:, fix bugs :bug:, and celebrate :champagne:!
 
@@ -113,7 +113,7 @@ Ship features :ship:, fix bugs :bug:, and celebrate :champagne:!
 
 ## Callouts & Admonitions
 
-Clearly supports GitHub/Obsidian-style callouts with `> [!TYPE]` syntax:
+Nearly supports GitHub/Obsidian-style callouts with `> [!TYPE]` syntax:
 
 > [!NOTE]
 > This is a note callout. Use it for supplementary information.
@@ -169,7 +169,7 @@ print(fibonacci(10))
 ```
 
 ```bash
-# Build Clearly from the command line
+# Build Nearly from the command line
 xcodegen generate
 xcodebuild -scheme Clearly -configuration Debug build
 ```
@@ -265,7 +265,7 @@ flowchart LR
     E --> G[Save .md]
     F --> G
     click F "https://daringfireball.net/projects/markdown/" "Markdown spec" _blank
-    click G "https://github.com/Shpigford/clearly" "Clearly on GitHub" _blank
+    click G "https://github.com/theontho/nearly" "Nearly on GitHub" _blank
 ```
 
 ```mermaid
@@ -284,7 +284,7 @@ sequenceDiagram
 
 ## Images
 
-![Clearly Screenshot](https://raw.githubusercontent.com/Shpigford/clearly/main/website/screenshot.jpg)
+![Nearly Screenshot](https://raw.githubusercontent.com/theontho/nearly/main/website/screenshot.jpg)
 
 *Click any image to view it in a lightbox!*
 
@@ -292,7 +292,7 @@ sequenceDiagram
 
 ## Footnotes
 
-Clearly renders GitHub-style footnotes[^1], including multiple references[^note] in the same paragraph[^1].
+Nearly renders GitHub-style footnotes[^1], including multiple references[^note] in the same paragraph[^1].
 
 *Hover over a footnote reference in preview mode to see a popover with the footnote content!*
 
@@ -308,7 +308,7 @@ Clearly renders GitHub-style footnotes[^1], including multiple references[^note]
 <details>
 <summary>Click to expand this section</summary>
 
-This content is hidden by default using the HTML `<details>` element. Clearly animates the open/close transition smoothly.
+This content is hidden by default using the HTML `<details>` element. Nearly animates the open/close transition smoothly.
 
 - You can put any markdown here
 - Including lists, code, and more
@@ -331,4 +331,4 @@ HTML passes through for when you need it:
 
 ## What's Next
 
-This document barely scratches the surface. Start building your own #knowledge-base — create a new file, link it with `[[double brackets]]`, and watch Clearly connect the dots for you. :rocket:
+This document barely scratches the surface. Start building your own #knowledge-base — create a new file, link it with `[[double brackets]]`, and watch Nearly connect the dots for you. :rocket:
